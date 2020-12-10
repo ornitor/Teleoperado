@@ -1,21 +1,30 @@
 import sys
 import paho.mqtt.client as mqtt 
 import pygame
+import time
 
 Broker = "192.168.25.233"
 PortaBroker = 1883
 username = ''
 password = ''
 KeepAliveBroker = 60
-TopicoSubscribe = "mov/#" 
+topicoRaiz = "Top100" 
+
+fgConnect = False
  
 #Callback - conexao ao broker realizada
 def on_connect(client, userdata, flags, rc):
     print("[STATUS] Conectado ao Broker. Resultado de conexao: ", str(rc))
- 
+    fgConnect = True
     #faz subscribe automatico no topico
-    client.subscribe(TopicoSubscribe)
- 
+    client.subscribe(topicoRaiz + "/#")
+
+def on_disconnect(client, userdata, flags, rc):
+    print("[STATUS] Caiu")
+    fgConnect = False
+    #faz subscribe automatico no topico
+    client.loop_stop()
+
 #Callback - mensagem recebida do broker
 def on_message(client, userdata, msg):
     MensagemRecebida = str(msg.payload)
@@ -26,12 +35,13 @@ def inicializaMQTT():
     global client
     client = mqtt.Client()
     client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
     client.on_message = on_message
     client.username_pw_set(username, password)
     client.connect(Broker, PortaBroker, KeepAliveBroker)
-    client.publish("house/bulb1","on") 
+    client.publish("Saudacao","Hi") 
     client.loop_start()
-    print("Acompanhe no terminal:\n\n\tmosquitto_sub -h 192.168.25.233 -k keepalive -p 1883 -t '#' -v")
+    print("Acompanhe no terminal:\n\n\tmosquitto_sub -h {} -k keepalive -p 1883 -t '#' -v".format(Broker))
 
 def inicializaJoystick():
     global joystick_count
@@ -59,15 +69,23 @@ def encodeAxis(axis):
     if axis < -0.9: axis = -0.9 
     return s + "{}".format(abs(int(axis*10)))
 
+
+last = 0
+vlast = 0
+
 def axisMotion():
+    global last, vlast
     s = ""
-    print("Joystick axis moved.")
+    #print(time.time())
     for  j in range(joystick_count):
         joy = pygame.joystick.Joystick(j)
         joy.init()
         for i in range(joy.get_numaxes()):
             s = s + encodeAxis(joy.get_axis(i))
-    client.publish("joy/axis",s)
+    if time.time() < 0.2 and vlast == s: return
+    client.publish(topicoRaiz + "/joy/axis",s)
+    last = time.time()  
+    vlast
     print("joy/axis",s)
 
 def hatMotion():
@@ -78,12 +96,12 @@ def hatMotion():
         joy.init()
         for i in range(joy.get_numhats(),):
             s = s + "{}".format(joy.get_hat(i))
-    client.publish("joy/hat",s)
+    client.publish(topicoRaiz + "/joy/hat",s)
     print("joy/hat",s)
 
 def ballMotion():
     print("Joystick ball moved.")
-    client.publish("joy/ball","on") 
+    client.publish(topicoRaiz + "/joy/ball","on") 
 
 def buttonPressed():
     s = ""
@@ -92,7 +110,7 @@ def buttonPressed():
         joy.init()
         for i in range(12):
             s = s + "{}".format(joy.get_button(i))
-    client.publish("joy/but",s) 
+    client.publish(topicoRaiz + "/joy/but",s) 
     print("buttom",s)
 
 def buttonReleased():
@@ -102,17 +120,22 @@ def buttonReleased():
         joy.init()
         for i in range(12):
             s = s + "{}".format(joy.get_button(i))
-    client.publish("joy/but",s) 
+    client.publish(topicoRaiz + "/joy/but",s) 
     print("buttom",s)
 
 
-    
+
+# pygame.display.set_caption('Matemática está em tudo')
+clock = pygame.time.Clock()   # relogio pra temporizar a animaçao 
 #programa principal:
 try:
         print("[STATUS] Inicializando MQTT...")
         inicializaMQTT()
         inicializaJoystick()
         while True:
+            if not fgConnect: 
+                client.reconnect()
+                fgConnect = True
             for event in pygame.event.get(): # User did something.
                 if event.type == pygame.QUIT: # If user clicked close.
                     done = True # Flag that we are done so we exit this loop.

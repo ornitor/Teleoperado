@@ -1,0 +1,5 @@
+# Teste do NodeMCU8266
+
+configure o teu acesso a rede e o seu broker.  Foi testado com  broker em rede local.
+
+Se usar um broker público ( sem senha, sem instancias como broker.hivemq.com)  evite subscrever "#" pois pode inundar sua subscriçao.
